@@ -1,149 +1,140 @@
-from flask import Flask, render_template, request, redirect, url_for
-import os
 import google.generativeai as genai
+from IPython.display import clear_output, Markdown
+import PyPDF2
+from pdf2image import convert_from_path
+from PIL import Image
+import easyocr
+import numpy as np # Import numpy
 
-# Set up Flask app
-app = Flask(__name__)
+from google.colab import files
 
-# Path to store uploaded files
-MATERIALS = 'Materials'
-if not os.path.exists(MATERIALS):
-    os.makedirs(MATERIALS)
+genai.configure(api_key="AIzaSyCWzhzAqcvNgvR-qjtfhkewH6IcgxFxx7g")
 
-ANSWERS = "answer_sheet"
-if not os.path.exists(ANSWERS):
-    os.makedirs(ANSWERS)
+def extract_text_from_pdf(pdf_path):
+    with open(pdf_path, 'rb') as pdf_file:
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        extracted_text = ""
+        for page in pdf_reader.pages:
+            text = page.extract_text()
+            if text:
+                extracted_text += text
+        return extracted_text
 
-# Store questions in a global variable (ideally, use a session or database in production)
-GENERATED_QUESTIONS = []
-
-# Configure API key for Gemini
-genai.configure(api_key="AIzaSyDGch-1IdXfW6o9q6-dMwIXBV17FNv6CJA")  # Replace with your actual API key
-
-# Helper function to generate questions using Gemini model
-def generate_questions(pdf_path):
-    try:
-        files = genai.upload_file(pdf_path)
-        question_generator = """
-        You are a question-generating assistant. 
-
+def questionor(notes, question_generator):
+    question_generator = f"""
+        You're a question-generating assistant.
+    
         Steps:
         1. Analyze all the uploaded files.
         2. Understand the materials.
-        3. Build 2 MCQ questions based on the provided materials.
-        4. Build 2 subjective questions based on the provided materials.
-        5. Shuffle the MCQ and subjective questions, add the question number (e.g: Question 1:...., Question 2:...) and display it.
-        6. Add a unique separator <q> to separate each question.
+        3. Build 2 MCQ questions based on the materials
+        3. Build 2 subjective questions based on the materials.
+        4. Shuffle the questions, number them (e.g., Question 1:...), and
+        5. separate each of the questions using <q> seprator.
+        5. Output only the questions.
+    
+        Note: No markdown elements.
+    """
+    
+    model = genai.GenerativeModel("gemini-1.5-pro")
+    
+    material = extract_text_from_pdf(notes)
+    
+    questions = model.generate_content([question_generator, material]).text
+    
+    return questions.split("<q>")
+    
+def answers_sheet(questions, filename = "answer_sheet.txt"):
+    answers = []
 
-        Note: Only the questions are required, no need for any other text.
-        Note: No need to add markdown elements.
-        Note: Total number of questions should be 4.
-        """
-        model = genai.GenerativeModel("gemini-1.5-pro")
-        questions = model.generate_content([question_generator, files]).text
-        return questions.split("<q>")
-    except Exception as e:
-        print(f"Error generating questions: {e}")
-        return []  # Return an empty list on error
+    for question in questions:
+        print(question)
+        answer = input("Answer: ")
+        answers.append((f"Question : {question.strip()}", f"Answer : {answer.strip()}"))
+    
+    # Create a .txt file with the Q&A format
+    with open(filename, "w") as file:
+        for question, answer in answers:
+            file.write(f"{question}\n{answer}\n\n")
 
-def extract_text_from_txt(txt_path):
-    with open(txt_path, 'r', encoding='utf-8') as txt_file:
-        extracted_text = txt_file.read()
+
+def evaluator(answer_paper):
+
+    evaluator = """
+        Your are an evaluation assistant where:
+    
+        1. You get the answer sheet provided by the user.
+        2. You check Answers corresponding to the question.
+        3. Then, evaluate the answers with questions.
+        4. And add evaluation as : correct, worng
+        5. The evaluation will be displayed as, evaluation: correct
+        6. The convert the evaluation score into percentage and display it at the end as "Total score : "
+        7. The you will add a unique seprator <evl> between the last question and Total score
+    
+        example:
+            Question 1: What is the capital of France?
+            Answer 1: Paris
+            Evaluation 1: correct
+            Question 2: What is the largest planet in our solar system?
+            Answer 2: Sun
+            Evaluation 2: wrong
+    
+    """
+
+
+    answer_sheet = genai.upload_file(answer_paper)
+    model = genai.GenerativeModel("gemini-1.5-pro")
+    evaluation = model.generate_content([evaluator, answer_sheet]).text
+
+    final_score = evaluation.split("<evl>")[-1]
+    print(final_score)
+    print()
+    time_limit = input("Time left for Exam: ")
+    
+    
+# Initialize EasyOCR
+reader = easyocr.Reader(['en'])  # Add other languages if needed
+
+def pdf_image_processor(pdf_path, output_path:str="previous year question paper.txt"):
+    images = convert_from_path(pdf_path)
+
+    for i, img in enumerate(images):
+        print(f"Processing page {i + 1}...")
+        # Convert PIL Image to NumPy array
+        img_np = np.array(img)
+        ocr_result = reader.readtext(img_np)  # Pass NumPy array to readtext
+        page_text = "\n".join([text[1] for text in ocr_result])
+        extracted_text += f"Page {i + 1}:\n{page_text}\n\n"
+
     return extracted_text
 
-def evaluation(answer_sheet):
-    evaluator = """
-        You are an evaluation assistant where:
 
-        1. You get the answer sheet provided by the user.
-        2. You check answers corresponding to the questions.
-        3. Evaluate the answers with questions.
-        4. Add evaluation as: correct or wrong.
-        5. Display the evaluation as: evaluation: correct.
-        6. Convert the evaluation score into a percentage and display it at the end as "Total score: ".
-        7. Add a unique separator <evl> between the last question and Total score.
+def important_topic_generator(pyq, notes, finial_score, time_left_for_exam):
+    topics_template = f"""
+    
+        Your are a content generating assistant which tells user important topics to be covered within the time limit.
+    
+        Steps:
+        1. You collects the study materials uploaded by the user: {notes}.
+        2. You get the final socre of the quiz: {final_score}.
+        3. You also collects previous year question paper: {pyq}.
+        4. Then, analyze the question paper and the materials.
+        5. After that you build most import topics to be covered within the time limit: {time_left_for_exam}
+        6. Then, the questions are displayed in plain form.
+    
+    
+        Note: don't display unnecessary text
+        Note: no need of examples
+    
     """
+    
+    model = genai.GenerativeModel(
+        model_name = "gemini-1.5-pro",
+        system_instruction=topics_template
+    
+    )
+    
+    response = model.generate_content(topics_template).text
 
-    Q_and_A_sheet = extract_text_from_txt(answer_sheet)
+    return response
 
-    try:
-        model = genai.GenerativeModel("gemini-1.5-pro")
-        result = model.generate_content([evaluator, Q_and_A_sheet]).text
-        print(result)
-        final_score = result.split("<evl>")[-1]  # Corrected from 'evaluation' to 'result'
-        return final_score
-    except Exception as e:
-        print(f"Error during evaluation: {e}")
-        return "Evaluation failed."
-
-# Flask route to upload file
-@app.route('/', methods=['GET', 'POST'])
-def upload_file():
-    global GENERATED_QUESTIONS  # Store questions globally
-    if request.method == 'POST':
-        file = request.files['file']
-        if file:
-            filepath = os.path.join(MATERIALS, file.filename)
-            file.save(filepath)
-            GENERATED_QUESTIONS = generate_questions(filepath)
-            if not GENERATED_QUESTIONS:
-                return render_template('error.html', message="Failed to generate questions. Please try again.")
-            return render_template('questions.html', questions=GENERATED_QUESTIONS, file_path=filepath)
-    return render_template('upload.html')
-
-# Flask route to submit answers
-@app.route('/submit_answers', methods=['POST'])
-def submit_answers():
-    global GENERATED_QUESTIONS  # Access generated questions
-    answer_sheet_folder = 'answer_sheet'
-    if not os.path.exists(answer_sheet_folder):
-        os.makedirs(answer_sheet_folder)
-
-    # Retrieve answers from the form
-    answers = []
-    for key in request.form.keys():
-        answers.append(request.form[key])
-
-    # Save the questions and answers to a file
-    answer_file = os.path.join(answer_sheet_folder, 'answersheet.txt')
-    with open(answer_file, 'w') as f:
-        for i, (question, answer) in enumerate(zip(GENERATED_QUESTIONS, answers), start=1):
-            f.write(f"{question}\n")
-            f.write(f"Answer {i}: {answer}\n\n")
-
-    # Perform evaluation of the answers
-    evaluation_result = evaluation(answer_file)
-
-    return render_template('evaluation.html', evaluation_result=evaluation_result)
-
-if __name__ == '__main__':
-    app.run(debug=True)  # Set debug=False in production
-
-    # Function to generate a study timeline based on grade
-def generate_study_timeline(grade):
-    timeline_request = f"""
-    Create a study timeline for a student with grade '{grade}'. 
-    Include specific topics to study each week for the next month.
-    """
-    try:
-        model = genai.GenerativeModel("gemini-1.5-pro")
-        timeline = model.generate_content([timeline_request]).text
-        return timeline.split("\n")  # Assuming timeline items are separated by new lines
-    except Exception as e:
-        print(f"Error generating timeline: {e}")
-        return []  # Return an empty list on error
-
-# Modify the evaluate route to include study timeline
-@app.route('/evaluate', methods=['POST'])
-def evaluate():
-    answer_sheet = request.json.get('answer_sheet')
-    final_score = calculate_score(answer_sheet)  # Placeholder for actual scoring logic
-    grade = assess_performance(final_score)  # Assess performance based on the score
-    study_topics = fetch_study_topics(grade)  # Fetch study topics based on the grade
-    study_timeline = generate_study_timeline(grade)  # Generate study timeline based on the grade
-    return jsonify({
-        'final_score': final_score,
-        'grade': grade,
-        'study_topics': study_topics,
-        'study_timeline': study_timeline  # Include the study timeline in the response
-    })
