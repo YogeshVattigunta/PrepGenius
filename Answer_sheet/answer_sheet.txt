@@ -1,0 +1,33 @@
+Question 1: Which of the following is NOT a characteristic of deadlock?
+A) Mutual Exclusion
+B) Hold and Wait
+C) Preemption
+D) Circular Wait
+
+
+A
+
+
+
+Question 2: In the context of multithreading, what is the Many-to-One Model?
+A) Many user-level threads mapped to one kernel thread.
+B) One user-level thread mapped to one kernel thread.
+C) Many user-level threads mapped to many kernel threads.
+D) One user-level thread mapped to many kernel threads.
+
+
+B
+
+
+
+Question 3: Explain the difference between preemptive and non-preemptive CPU scheduling.  Provide examples of scheduling algorithms for each type.
+
+
+NameError: name 'submit_button' is not defined Traceback: File "J:\Club\CRCM\Makeathon\.env\Lib\site-packages\streamlit\runtime\scriptrunner\exec_code.py", line 88, in exec_func_with_error_handling     result = func()              ^^^^^^ File "J:\Club\CRCM\Makeathon\.env\Lib\site-packages\streamlit\runtime\scriptrunner\script_runner.py", line 579, in code_to_exec     exec(code, module.__dict__) File "J:\Club\CRCM\Makeathon\app.py", line 86, in <module>     if submit_button:        ^^^^^^^^^^^^^
+
+
+
+Question 4: Describe the Producer-Consumer problem and explain how semaphores can be used to solve it.  What issues arise if the producer and consumer are not properly synchronized?
+
+I don't know
+
